@@ -2,113 +2,120 @@
 
 class Resource(object):
     
-    def __init__(self, req):
-        self.req = req
+    def __init__(self, wrq):
+        self.wrq = wrq
     
-    def ping(self, wrq):
-        return (True, wrq)
+    def ping(self):
+        return True
     
-    def service_available(self, wrq):
-        return (True, wrq)
+    def service_available(self):
+        return True
     
-    def resource_exists(self, wrq):
-        return (True, wrq)
+    def resource_exists(self):
+        return True
     
-    def auth_required(self, wrq):
-        return (True, wrq)
+    def auth_required(self):
+        return True
     
-    def is_authorized(self, wrq):
-        return (True, wrq)
+    def is_authorized(self):
+        return True
     
-    def forbidden(self, wrq):
-        return (False, wrq)
+    def forbidden(self):
+        return False
     
-    def allow_missing_post(self, wrq):
-        return (False, wrq)
+    def allow_missing_post(self):
+        return False
 
-    def uri_too_long(self, wrq):
-        return (False, wrq)
+    def uri_too_long(self):
+        return False
 
-    def malformed_request(self, wrq):
-        return (False, wrq)
+    def malformed_request(self):
+        return False
     
-    def known_content_type(self, wrq):
-        return (True, wrq)
+    def known_content_type(self):
+        return True
     
-    def valid_content_headers(self, wrq):
-        return (True, wrq)
+    def valid_content_headers(self):
+        return True
     
-    def valid_entity_length(self, wrq):
-        return (True, wrq)
+    def valid_entity_length(self):
+        return True
     
-    def options(self, wrq):
-        return ([], wrq)
+    def options(self):
+        return []
     
-    def allowed_methods(self, wrq):
-        return (["GET", "HEAD"], wrq)
+    def allowed_methods(self):
+        return ["GET", "HEAD"]
     
-    def known_methods(self, wrq):
-        return ("GET HEAD POST PUT DELETE TRACE CONNECT OPTIONS".split(), wrq)
+    def known_methods(self):
+        return [
+            "GET", "HEAD", "POST", "PUT", "DELETE",
+            "TRACE", "CONNECT", "OPTIONS"
+        ]
 
-    def content_types_provided(self, wrq):
-        return ([("text/html", lambda x: self.to_html(x))], wrq)
+    def content_types_provided(self):
+        return [
+            ("text/html", lambda x: self.to_html(x))
+        ]
     
-    def content_types_accepted(self, wrq):
-        return ([], wrq)
+    def content_types_accepted(self):
+        return None
     
-    def delete_resource(self, wrq):
-        return (False, wrq)
+    def delete_resource(self):
+        return False
     
-    def delete_completed(self, wrq):
-        return (True, wrq)
+    def delete_completed(self):
+        return True
     
-    def post_is_create(self, wrq):
-        return (False, wrq)
+    def post_is_create(self):
+        return False
 
-    def create_path(self, wrq):
-        return (None, wrq)
+    def create_path(self):
+        return None
     
-    def process_post(self, wrq):
-        return (False, wrq)
+    def process_post(self):
+        return False
 
-    def languages_available(self, wrq):
-        return ([], wrq)
+    def languages_available(self):
+        return None
     
-    def charsets_provided(self, wrq):
+    def charsets_provided(self):
         """\
         return [("iso-8859-1", lambda x: x)]
         """
-        return ([], wrq)
+        return None
 
-    def encodings_provided(self, wrq):
-        return ([("identity", lambda x: x)], wrq)
+    def encodings_provided(self):
+        return [
+            ("identity", lambda x: x)
+        ]
     
-    def variances(self, wrq):
-        return ([], wrq)
+    def variances(self):
+        return []
     
-    def is_conflict(self, wrq):
-        return (False, wrq)
+    def is_conflict(self):
+        return False
     
-    def multiple_choices(self, wrq):
-        return (False, wrq)
+    def multiple_choices(self):
+        return False
     
-    def previously_existed(self, wrq):
-        return (False, wrq)
+    def previously_existed(self):
+        return False
 
-    def moved_permanently(self, wrq):
-        return (False, wrq)
+    def moved_permanently(self):
+        return False
     
-    def moved_temporarily(self, wrq):
-        return (False, wrq)
+    def moved_temporarily(self):
+        return False
     
-    def last_modified(self, wrq):
-        return (None, wrq)
+    def last_modified(self):
+        return None
     
-    def expires(self, wrq):
-        return (None, wrq)
+    def expires(self):
+        return None
     
-    def generate_etag(self, wrq):
-        return (None, wrq)
+    def generate_etag(self):
+        return None
     
-    def finish_request(self, wrq):
-        return (True, wrq)
+    def finish_request(self):
+        return True
