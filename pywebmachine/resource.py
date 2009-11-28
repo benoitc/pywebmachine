@@ -1,6 +1,9 @@
 
 class Resource(object):
 
+    def __init__(self, req, rsp):
+        pass
+
     def allowed_methods(self, req, rsp):
         return ["GET", "HEAD"]
 
@@ -21,10 +24,10 @@ class Resource(object):
 
     def content_types_provided(self, req, rsp):
         return [
-            ("text/html", lambda x: self.to_html(x))
+            ("text/html", self.to_html)
         ]
 
-    def create_path(self, req, rsp):
+    def created_location(self, req, rsp):
         return None
 
     def delete_completed(self, req, rsp):
@@ -60,12 +63,12 @@ class Resource(object):
         return True
 
     def known_methods(self, req, rsp):
-        return [
+        return set([
             "GET", "HEAD", "POST", "PUT", "DELETE",
             "TRACE", "CONNECT", "OPTIONS"
-        ]
+        ])
 
-    def languages_available(self, req, rsp):
+    def languages_provided(self, req, rsp):
         return None
 
     def last_modified(self, req, rsp):

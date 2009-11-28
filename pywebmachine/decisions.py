@@ -1,27 +1,28 @@
 
 import datetime
+import types
 
-import conneg
-import utils
+import webob.exc
 
 def b03(res, req, rsp):
     "Options?"
     if req.method == 'OPTIONS':
-        rsp.headers["OPTIONS"] = res.options(req, rsp)
+        for (header, value) in res.options(req, rsp):
+            rsp.headers[header] = value
         return True
     return False
 
 def b04(res, req, rsp):
     "Request entity too large?"
-    return res.valid_entity_length(req, rsp)
+    return not res.valid_entity_length(req, rsp)
 
 def b05(res, req, rsp):
     "Unknown Content-Type?"
-    return res.known_content_type(req, rsp)
+    return not res.known_content_type(req, rsp)
 
 def b06(res, req, rsp):
     "Unknown or unsupported Content-* header?"
-    return res.valid_content_headers(req, rsp)
+    return not res.valid_content_headers(req, rsp)
 
 def b07(res, req, rsp):
     "Forbidden?"
@@ -57,7 +58,7 @@ def b12(res, req, rsp):
 
 def b13(res, req, rsp):
     "Service available?"
-    return res.ping() && res.service_available(req, rsp)
+    return res.ping(req, rsp) and res.service_available(req, rsp)
 
 def c03(res, req, rsp):
     "Accept exists?"
@@ -65,7 +66,7 @@ def c03(res, req, rsp):
 
 def c04(res, req, rsp):
     "Acceptable media type available?"
-    ctypes = [ctype for (ctype, func) in req.content_types_provided(req, rsp)]
+    ctypes = [ctype for (ctype, func) in req.content_types_accepted(req, rsp)]
     ctype = req.accept.best_match(ctypes)
     if ctype is None:
         return False
@@ -91,7 +92,10 @@ def e05(res, req, rsp):
 
 def e06(res, req, rsp):
     "Acceptable charset available?"
-    charsets = [cs for (cs, func) in res.charsets_provided(req, rsp)]
+    charsets = res.charsets_provided(req, rsp)
+    if not charsets:
+        return True
+    charsets = [cs for (cs, func) in charsets]
     charset = req.accept_charset.best_match(charsets)
     if charset is None:
         return False
@@ -116,18 +120,18 @@ def g07(res, req, rsp):
 
     # Set variances now that conneg is done
     hdr = []
-    if len(res.content_types_available(req, rsp)) > 1:
+    if len(res.content_types_provided(req, rsp) or []) > 1:
         hdr.append("Accept")
-    if len(res.charsets_provided(req, rsp)) > 1:
+    if len(res.charsets_provided(req, rsp) or []) > 1:
         hdr.append("Accept-Charset")
-    if len(res.encodings_provided(req, rsp)) > 1:
+    if len(res.encodings_provided(req, rsp) or []) > 1:
         hdr.append("Accept-Encoding")
-    if len(res.languages_provided(req, rsp)) > 1:
+    if len(res.languages_provided(req, rsp) or []) > 1:
         hdr.append("Accept-Language")
     hdr.extend(res.variances(req, rsp))
     rsp.vary = hdr
 
-    return res.resouce_exists(req, rsp)
+    return res.resource_exists(req, rsp)
 
 def g08(res, req, rsp):
     "If-Match exists?"
@@ -246,14 +250,11 @@ def n05(res, req, rsp):
 def n11(res, req, rsp):
     "Redirect?"
     if res.post_is_create(req, rsp):
-        uri = res.create_path(req, rsp)
-        if not isinstance(uri, basestring):
-            raise errors.ServerError("post_is_create w/o create_path")
+        handle_request_body(res, req, rsp)
     elif not res.process_post(req, rsp):
         raise errors.ServerError("Failed to process POST body.")
-    if rsp.redirect:
-        if not rsp.location:
-            raise errors.ServerError("Redirect requested without Location set.")
+    rsp.location = res.created_location(req, rsp)
+    if rsp.location:
         return True
     return False
 
@@ -270,16 +271,117 @@ def o16(res, req, rsp):
     return req.method == "PUT"
 
 def o18(res, req, rsp):
-    "Multiple representations?"
+    "Multiple representations? (Build GET/HEAD body)"
+    if req.method not in ["GET", "HEAD"]:
+        return res.multiple_choices(req, rsp)
+    
+    rsp.etag = res.generate_etag(req, rsp)
+    rsp.last_modified = res.last_modified(req, rsp)
+    rsp.expires = res.expires(req, rsp)
+    
+    func = [
+        f for (ct, f)
+        in res.content_types_provided(req, rsp) if ct == rsp.content_type
+    ][0]
+    
+    rsp.app_iter = func(req, rsp)
+
     return res.multiple_choices(req, rsp)
 
 def o20(res, req, rsp):
     "Response includes entity?"
-    return req.body is not None
+    return req.app_iter is not None
 
 def p03(res, req, rsp):
     "Conflict?"
-    return res.is_conflict(req, rsp)
+    if res.is_conflict(req, rsp):
+        return True
+    handle_request_body(res, req, rsp)
+    return False
 
-def p11(res, res, rsp):
+def p11(res, req, rsp):
+    "New resource?"
     return rsp.location is not None
+
+def handle_request_body(res, req, rsp):
+    ctype = req.content_type or "application/octet-stream"
+    mtype = ctype.split(";", 1)[0]
+    
+    funcs = [
+        f for (mt, f)
+        in res.content_types_accepted(req, rsp) if mt == mtype
+    ]
+    if len(funcs) == 0:
+        raise webob.exc.HTTPUnsupportedMediaType()
+    
+    return funcs[0](req, rsp)
+
+
+TRANSITIONS = {
+    b03: (200, c03), # Options?
+    b04: (413, b03), # Request entity too large?
+    b05: (415, b04), # Unknown Content-Type?
+    b06: (501, b05), # Unknown or unsupported Content-* header?
+    b07: (403, b06), # Forbidden?
+    b08: (b07, 401), # Authorized?
+    b09: (400, b08), # Malformed?
+    b10: (b09, 405), # Is method allowed?
+    b11: (414, b10), # URI too long?
+    b12: (b11, 501), # Known method?
+    b13: (b12, 503), # Service available?
+    c03: (c04, d04), # Accept exists?
+    c04: (d04, 406), # Acceptable media type available?
+    d04: (d05, e05), # Accept-Language exists?
+    d05: (e05, 406), # Accept-Language available?
+    e05: (f06, e06), # Accept-Charset exists?
+    e06: (f06, 406), # Acceptable charset available?
+    f06: (f07, g07), # Accept-Encoding exists?
+    f07: (g07, 406), # Acceptable encoding available?
+    g07: (g08, h07), # Resource exists?
+    g08: (g09, h10), # If-Match exists?
+    g09: (h10, g11), # If-Match: * exists?
+    g11: (h10, 412), # Etag in If-Match?
+    h07: (412, i07), # If-Match: * exists?
+    h10: (h11, i12), # If-Unmodified-Since exists?
+    h11: (h12, i12), # If-Unmodified-Since is valid date?
+    h12: (412, i12), # Last-Modified > If-Unmodified-Since?
+    i04: (301, p03), # Apply to a different URI?
+    i07: (i04, k07), # PUT?
+    i12: (i13, l13), # If-None-Match exists?
+    i13: (j18, k13), # If-None-Match: * exists?
+    j18: (304, 412), # GET/HEAD?
+    k05: (301, l05), # Resource moved permanently?
+    k07: (k05, l07), # Resource previously existed?
+    k13: (j18, l13), # Etag in If-None-Match?
+    l05: (307, m05), # Resource moved temporarily?
+    l07: (m07, 404), # POST?
+    l13: (l14, m16), # If-Modified-Since exists?
+    l14: (l15, m16), # If-Modified-Since is valid date?
+    l15: (m16, l17), # If-Modified-Since > Now?
+    l17: (m16, 304), # Last-Modified > If-Modified-Since?
+    m05: (n05, 410), # POST?
+    m07: (n11, 404), # Server permits POST to missing resource?
+    m16: (m20, n16), # DELETE?
+    m20: (o20, 202), # Delete enacted?
+    n05: (n11, 410), # Server permits POST to missing resource?
+    n11: (303, p11), # Redirect?
+    n16: (n11, o16), # POST?
+    o14: (409, p11), # Conflict?
+    o16: (o14, o18), # PUT?
+    o18: (300, 200), # Multiple representations?
+    o20: (o18, 204), # Response includes entity?
+    p03: (409, p11), # Conflict?
+    p11: (201, o20)  # New resource?
+}
+
+def process(klass, req, rsp):
+    res = klass(req, rsp)
+    state = b13
+    while not isinstance(state, int):
+        if state(res, req, rsp):
+            state = TRANSITIONS[state][0]
+        else:
+            state = TRANSITIONS[state][1]
+        if not isinstance(state, (int, types.FunctionType)):
+            raise webob.exc.HTTPServerError("Invalid state: %r" % state)
+    rsp.status = state

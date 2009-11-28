@@ -3,6 +3,15 @@
 # This file is part of the pywebmachine package released
 # under the MIT license.
 import unittest
+import webob
+import webob.exc as woexc
+
+from pywebmachine import process, Resource
+
+class Test(unittest.TestCase):
+    def setUp(self):
+        self.req = webob.Request.blank("/")
+        self.rsp = webob.Response()
 
 def eq(a, b):
     assert a == b, "%r != %r" % (a, b)
