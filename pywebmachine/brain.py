@@ -59,22 +59,17 @@ TRANSITIONS = {
     p11: (201, o20)  # New resource?
 }
 
-def process(klass, wrq):
-    res = resource_class(wrq)
-    try:
-        state = b13
-        while True:
-            result = state(res, req)
-            if result:
-                state = TRANSITIONS[state][0]
-            else:
-                state = TRANSITIONS[state][1]
-            if isinstance(next_state, int):
-                return next_state
-            elif not isinstance(next_state, types.FunctionType):
-                raise errors.InternalServerError("Invalid state: %r" % state)
-    except errors.Halt:
-        return inst.code
-    except errors.PyWMError, inst:
-        wrq.set_body(inst.mesg)
-        return inst.code
+def process(klass, req, rsp):
+    res = klass(req, rsp)
+    state = b13
+    while True:
+        result = state(res, req, rsp)
+        if result:
+            state = TRANSITIONS[state][0]
+        else:
+            state = TRANSITIONS[state][1]
+        if isinstance(state, int):
+            rsp.status = state
+            return rsp
+        elif not isinstance(state, types.FunctionType):
+            raise webob.exc.HTTPServerError("Invalid state: %r" % state)

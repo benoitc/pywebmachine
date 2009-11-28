@@ -4,300 +4,282 @@ import datetime
 import conneg
 import utils
 
-def b03(res, wrq):
+def b03(res, req, rsp):
     "Options?"
-    if wrq.method().upper() == "OPTIONS":
-        req.set_response_header(res.options())
+    if req.method == 'OPTIONS':
+        rsp.headers["OPTIONS"] = res.options(req, rsp)
         return True
     return False
 
-def b04(res, wrq):
+def b04(res, req, rsp):
     "Request entity too large?"
-    return res.valid_entity_length()
+    return res.valid_entity_length(req, rsp)
 
-def b05(res, wrq):
+def b05(res, req, rsp):
     "Unknown Content-Type?"
-    return res.known_content_type()
+    return res.known_content_type(req, rsp)
 
-def b06(res, wrq):
+def b06(res, req, rsp):
     "Unknown or unsupported Content-* header?"
-    return res.valid_content_headers()
+    return res.valid_content_headers(req, rsp)
 
-def b07(res, wrq):
+def b07(res, req, rsp):
     "Forbidden?"
-    return res.forbidden()
+    return res.forbidden(req, rsp)
 
-def b08(res, wrq):
+def b08(res, req, rsp):
     "Authorized?"
-    resp = res.is_authorized()
+    resp = res.is_authorized(req, rsp)
     if resp is True:
         return True
     elif isinstance(resp, basestring):
-        wrq.set_response_header("WWW-Authenticate", resp)
+        rsp.headers["WWW-Authenticate"] = resp
     return False
 
-def b09(res, wrq):
+def b09(res, req, rsp):
     "Malformed?"
-    return res.malformed_request()
+    return res.malformed_request(req, rsp)
 
-def b10(res, wrq):
+def b10(res, req, rsp):
     "Is method allowed?"
-    return wrq.method().upper() in res.allowed_methods()
+    if req.method in res.allowed_methods(req, rsp):
+        return True
+    rsp.allowed = res.allowed_methods(req, rsp)
+    return False
 
-def b11(res, wrq):
+def b11(res, req, rsp):
     "URI too long?"
-    return res.uri_too_long()
+    return res.uri_too_long(req, rsp)
 
-def b12(res, wrq):
+def b12(res, req, rsp):
     "Known method?"
-    return wrq.method().upper() in res.allowed_methods()
+    return req.method in res.known_methods(req, rsp)
 
-def b13(res, wrq):
+def b13(res, req, rsp):
     "Service available?"
-    return res.ping() && res.service_available()
+    return res.ping() && res.service_available(req, rsp)
 
-def c03(res, wrq):
+def c03(res, req, rsp):
     "Accept exists?"
-    return wrq.get_header("accept") is not None:
+    return "accept" in req.headers
 
-def c04(res, wrq):
+def c04(res, req, rsp):
     "Acceptable media type available?"
-    ctypes = [ctype for (ctype, func) in req.content_types_provided(wrq)]
-    ctype = conneg.accept_match(ctypes, wrq.get_header('accept'))
+    ctypes = [ctype for (ctype, func) in req.content_types_provided(req, rsp)]
+    ctype = req.accept.best_match(ctypes)
     if ctype is None:
         return False
-    wrq.set_meta("content-type", ctype)
+    rsp.content_type = ctype
     return True
 
-def d04(res, wrq):
+def d04(res, req, rsp):
     "Accept-Language exists?"
-    return wrq.get_header('accept-language') is not None
+    return "accept-language" in req.headers
 
-def d05(res, wrq):
+def d05(res, req, rsp):
     "Accept-Language available?"
-    (langs, wrq) = res.languages_available(wrq)
-    lang = conneg.language_match(langs, wrq.get_header("accept-language"))
+    langs = res.languages_available(req, rsp)
+    lang = req.accept_language.best_match(langs)
     if lang is None:
         return False
-    wrq.set_meta("language", lang)
+    rsp.content_language = lang
     return True
     
-def e05(res, wrq):
+def e05(res, req, rsp):
     "Accept-Charset exists?"
-    return wrq.get_header("accept-charset") is not None
+    return "accept-charset" in req.headers
 
-def e06(res, wrq):
+def e06(res, req, rsp):
     "Acceptable charset available?"
-    (charsets, wrq) = res.charsets_provided(wrq)
-    charset = conneg.charset_match(charsets, wrq.get_header("accept-charset"))
+    charsets = [cs for (cs, func) in res.charsets_provided(req, rsp)]
+    charset = req.accept_charset.best_match(charsets)
     if charset is None:
         return False
-    wrq.set_meta("charset", charset)
-
-    # Set the content-type now that we know it.
-    ctype = wrq.get_meta("content-type") + "; " + charset
-    wrq.set_response_header("Content-Type", ctype)
-
+    rsp.charset = charset
     return True
 
-def f06(res, wrq):
+def f06(res, req, rsp):
     "Accept-Encoding exists?"
-    return wrq.get_header("accept-encoding") is not None
+    return "accept-encoding" in req.headers
 
-def f07(res, wrq):
+def f07(res, req, rsp):
     "Acceptable encoding available?"
-    (encodings, wrq) = res.charsets_provided(wrq)
-    enc = conneg.encoding_match(encodings, wrq.get_header("accept-encodings"))
+    encodings = [enc for (enc, func) in res.charsets_provided(req, rsp)]
+    enc = req.accept_encoding.best_match(encodings)
     if enc is None:
         return False
-    wrq.set_meta("encoding", enc)
+    rsp.content_encoding = enc
     return True
 
-def g07(res, wrq):
+def g07(res, req, rsp):
     "Resource exists?"
 
     # Set variances now that conneg is done
     hdr = []
-    if len(res.content_types_available()) > 1:
+    if len(res.content_types_available(req, rsp)) > 1:
         hdr.append("Accept")
-    if len(res.charsets_provided()) > 1:
+    if len(res.charsets_provided(req, rsp)) > 1:
         hdr.append("Accept-Charset")
-    if len(res.encodings_provided()) > 1:
+    if len(res.encodings_provided(req, rsp)) > 1:
         hdr.append("Accept-Encoding")
-    if len(res.languages_provided()) > 1:
+    if len(res.languages_provided(req, rsp)) > 1:
         hdr.append("Accept-Language")
-    hdr.extend(res.variances())
-    wrq.set_response_header("Vary", ", ".join(hdr))
+    hdr.extend(res.variances(req, rsp))
+    rsp.vary = hdr
 
-    return res.resouce_exists()
+    return res.resouce_exists(req, rsp)
 
-def g08(res, wrq):
+def g08(res, req, rsp):
     "If-Match exists?"
-    return wrq.get_header("if-match") is not None
+    return "if-match" in req.headers
 
-def g09(res, wrq):
+def g09(res, req, rsp):
     "If-Match: * exists?"
-    return "*" in wrq.get_header_list("if-match")
+    return '*' in req.if_match
 
-def g11(res, wrq):
+def g11(res, req, rsp):
     "Etag in If-Match?"
-    return res.generate_etag() in res.get_header_list("if-match")
+    return res.generate_etag(req, rsp) in req.if_match
 
-def h07(res, wrq):
+def h07(res, req, rsp):
     "If-Match: * exists?"
-    return "*" in wrq.get_header_list("if-match")
+    return '*' in req.if_match
 
-def h10(res, wrq):
+def h10(res, req, rsp):
     "If-Unmodified-Since exists?"
-    return wrq.get_header("if-unmodified-since") is not None
+    return "if-unmodified-since" in req.headers
 
-def h11(res, wrq):
+def h11(res, req, rsp):
     "If-Unmodified-Since is a valid date?"
-    try:
-        since = utils.parse_date(wrq.get_header("if-unmodified-since"))
-        wrq.set_meta("unmodified-since", since)
-        return True
-    except:
-        return False
+    return req.if_unmodified_since is not None
 
-def h12(res, wrq):
+def h12(res, req, rsp):
     "Last-Modified > If-Unmodified-Since?"
-    since = wrq.get_meta("unmodified-since")
-    last = res.last_modified()
-    wrq.set_response_header("Last-Modified", utils.to_http_date_str(last))
-    return last > since
+    rsp.last_modified = res.last_modified(req, rsp)
+    return rsp.last_modified > req.if_unmodified_since
 
-def i04(res, wrq):
+def i04(res, req, rsp):
     "Apply to a different URI?"
-    uri = res.moved_permanently()
-    if isinstance(uri, basestring):
-        wrq.set_response_header("Location", uri)
-        return True
-    return False
-
-def i07(res, wrq):
-    "PUT?"
-    return wrq.method().upper() == "PUT"
-
-def i12(res, wrq):
-    "If-None-Match exists?"
-    return wrq.get_header("if-none-match") is not None
-    
-def i13(res, wrq):
-    "If-None-Match: * exists?"
-    return "*" in wrq.get_header_list("if-none-match")
-
-def j18(res, wrq):
-    "GET/HEAD?"
-    return wrq.method().upper() in ["GET", "HEAD"]
-
-def k05(res, wrq):
-    "Resource moved permanently?"
-    uri = res.moved_permanently()
-    if isinstance(result, basestring):
-        wrq.set_response_header("Location", uri)
-        return True
-    return False
-
-def k07(res, wrq):
-    "Resource previously existed?"
-    return res.previously_existed()
-
-def k13(res, wrq):
-    "Etag in If-None-Match?"
-    return res.generate_etag() in wrq.get_header_list("if-none-match")
-
-def l05(res, wrq):
-    "Resource moved temporarily?"
-    return res.moved_temporarily()
-
-def l07(res, wrq):
-    "POST?"
-    return wrq.method().upper() == "POST"
-
-def l13(res, wrq):
-    "If-Modified-Since exists?"
-    return wrq.get_header("if-modified-since") is not None
-
-def l14(res, wrq):
-    "If-Modified-Since is a valid date?"
-    try:
-        since = utils.parse_date(wrq.get_header("if-modified-since"))
-        wrq.set_meta("modified-since", since)
-        return True
-    except:
+    uri = res.moved_permanently(req, rsp)
+    if not uri:
         return False
+    rsp.location = uri
+    return True
 
-def l15(res, wrq):
-    "If-Modified-Since > Now?"
-    since = wrq.get_meta("modified-since")
-    now = datetime.datetime.now()
-    return since > now
+def i07(res, req, rsp):
+    "PUT?"
+    return req.method == "PUT"
 
-def l17(res, wrq):
-    "Last-Modified > If-Modified-Since?"
-    since = wrq.get_meta("modified-since")
-    last = res.last_modified()
-    wrq.set_response_header("Last-Modified", utils.to_http_date_str(last))
-    return last > since
+def i12(res, req, rsp):
+    "If-None-Match exists?"
+    return "if-none-match" in req.headers
+    
+def i13(res, req, rsp):
+    "If-None-Match: * exists?"
+    return '*' in req.if_none_match
+    
+def j18(res, req, rsp):
+    "GET/HEAD?"
+    return req.method in ["GET", "HEAD"]
 
-def m05(res, wrq):
+def k05(res, req, rsp):
+    "Resource moved permanently?"
+    uri = res.moved_permanently(req, rsp)
+    if not uri:
+        return False
+    rsp.location = uri
+    return True
+
+def k07(res, req, rsp):
+    "Resource previously existed?"
+    return res.previously_existed(req, rsp)
+
+def k13(res, req, rsp):
+    "Etag in If-None-Match?"
+    return res.generate_etag(req, rsp) in req.if_none_match
+
+def l05(res, req, rsp):
+    "Resource moved temporarily?"
+    return res.moved_temporarily(req, rsp)
+
+def l07(res, req, rsp):
     "POST?"
-    return wrq.method().upper() == "POST"
+    return req.method == "POST"
 
-def m07(res, wrq):
+def l13(res, req, rsp):
+    "If-Modified-Since exists?"
+    return "if-modified-since" in req.headers
+
+def l14(res, req, rsp):
+    "If-Modified-Since is a valid date?"
+    return req.if_modified_since is not None
+
+def l15(res, req, rsp):
+    "If-Modified-Since > Now?"
+    return req.if_modified_since > datetime.datetime.now()
+
+def l17(res, req, rsp):
+    "Last-Modified > If-Modified-Since?"
+    rsp.last_modified = res.last_modified(req, rsp)
+    return rsp.last_modified > req.if_modified_since
+
+def m05(res, req, rsp):
+    "POST?"
+    return req.method == "POST"
+
+def m07(res, req, rsp):
     "Server permits POST to missing resource?"
-    return res.allow_missing_post()
+    return res.allow_missing_post(req, rsp)
 
-def m16(res, wrq):
+def m16(res, req, rsp):
     "DELETE?"
-    return wrq.method().upper() == "DELETE"
+    return req.method == "DELETE"
 
-def m20(res, wrq):
+def m20(res, req, rsp):
     "Delete enacted?"
-    return res.delete_completed()
+    return res.delete_completed(req, rsp)
 
-def n05(res, wrq):
+def n05(res, req, rsp):
     "Server permits POST to missing resource?"
-    return res.allow_missing_post()
+    return res.allow_missing_post(req, rsp)
 
-def n11(res, wrq):
+def n11(res, req, rsp):
     "Redirect?"
-    if res.post_is_create():
-        uri = res.create_path()
+    if res.post_is_create(req, rsp):
+        uri = res.create_path(req, rsp)
         if not isinstance(uri, basestring):
             raise errors.ServerError("post_is_create w/o create_path")
-    elif not res.process_post():
+    elif not res.process_post(req, rsp):
         raise errors.ServerError("Failed to process POST body.")
-    if wrq.is_redirect():
-        if wrq.get_response_header("Location") is None:
+    if rsp.redirect:
+        if not rsp.location:
             raise errors.ServerError("Redirect requested without Location set.")
         return True
     return False
 
-def n16(res, wrq):
+def n16(res, req, rsp):
     "POST?"
-    return wrq.method().upper() == "POST"
+    return req.method == "POST"
 
-def o14(res, wrq):
+def o14(res, req, rsp):
     "Is conflict?"
-    return res.is_conflict()
+    return res.is_conflict(req, rsp)
 
-def o16(res, wrq):
+def o16(res, req, rsp):
     "PUT?"
-    return wrq.method().upper() == "PUT"
+    return req.method == "PUT"
 
-def o18(res, wrq):
+def o18(res, req, rsp):
     "Multiple representations?"
-    return res.multiple_choices()
+    return res.multiple_choices(req, rsp)
 
-def o20(res, wrq):
+def o20(res, req, rsp):
     "Response includes entity?"
-    return wrq.has_body()
+    return req.body is not None
 
-def p03(res, wrq):
+def p03(res, req, rsp):
     "Conflict?"
-    return wrq.is_conflict()
+    return res.is_conflict(req, rsp)
 
-def p11(res, wrq):
-    return wrq.get_response_header("Location") is not None
+def p11(res, res, rsp):
+    return rsp.location is not None
