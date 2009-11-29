@@ -416,7 +416,7 @@ def process(klass, req, rsp):
 
     state = b13
     while not isinstance(state, int):
-        print state
+        #print state
         if state(res, req, rsp):
             state = TRANSITIONS[state][0]
         else:

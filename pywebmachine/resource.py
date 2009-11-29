@@ -40,9 +40,12 @@ class Resource(object):
         return False
 
     def encodings_provided(self, req, rsp):
-        return [
-            ("identity", lambda x: x)
-        ]
+        """\
+        return [("identity", lambda x: x)]
+
+        Returning None prevents the encoding negotiation logic.
+        """
+        return None
 
     def expires(self, req, rsp):
         return None
@@ -75,7 +78,7 @@ class Resource(object):
         """\
         return ["en", "es", "en-gb"]
         
-        returning None short circuits the language negotiation.
+        returning None short circuits the language negotiation
         """
         return None
 
