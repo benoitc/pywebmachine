@@ -12,12 +12,12 @@ class b04(t.Test):
     
     def test_ok(self):
         self.req.body = 'foo'
-        t.process(self.TestResource, self.req, self.rsp)
+        self.go()
         t.eq(self.rsp.status, '200 OK')
         t.eq(self.rsp.body, 'yay good')
 
     def test_not_ok(self):
         self.req.body = 'foo' * 1024
-        t.process(self.TestResource, self.req, self.rsp)
+        self.go()
         t.eq(self.rsp.status, '413 Request Entity Too Large')
         t.eq(self.rsp.body, '')

@@ -16,6 +16,9 @@ class Resource(object):
     def charsets_provided(self, req, rsp):
         """\
         return [("iso-8859-1", lambda x: x)]
+        
+        Returning None prevents the character set negotiation
+        logic.
         """
         return None
 
@@ -69,6 +72,11 @@ class Resource(object):
         ])
 
     def languages_provided(self, req, rsp):
+        """\
+        return ["en", "es", "en-gb"]
+        
+        returning None short circuits the language negotiation.
+        """
         return None
 
     def last_modified(self, req, rsp):

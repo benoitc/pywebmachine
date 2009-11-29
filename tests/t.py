@@ -4,7 +4,7 @@
 # under the MIT license.
 import unittest
 import webob
-import webob.exc as woexc
+import webob.exc
 
 from pywebmachine import process, Resource
 
@@ -12,6 +12,12 @@ class Test(unittest.TestCase):
     def setUp(self):
         self.req = webob.Request.blank("/")
         self.rsp = webob.Response()
+
+    def go(self):
+        try:
+            process(self.TestResource, self.req, self.rsp)
+        except webob.exc.HTTPException, error:
+            self.rsp = error
 
 def eq(a, b):
     assert a == b, "%r != %r" % (a, b)

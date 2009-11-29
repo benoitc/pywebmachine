@@ -2,6 +2,7 @@
 import datetime
 import types
 
+import webob
 import webob.exc
 
 def b03(res, req, rsp):
@@ -66,7 +67,7 @@ def c03(res, req, rsp):
 
 def c04(res, req, rsp):
     "Acceptable media type available?"
-    ctypes = [ctype for (ctype, func) in req.content_types_accepted(req, rsp)]
+    ctypes = [ctype for (ctype, func) in res.content_types_provided(req, rsp)]
     ctype = req.accept.best_match(ctypes)
     if ctype is None:
         return False
@@ -79,11 +80,12 @@ def d04(res, req, rsp):
 
 def d05(res, req, rsp):
     "Accept-Language available?"
-    langs = res.languages_available(req, rsp)
-    lang = req.accept_language.best_match(langs)
-    if lang is None:
-        return False
-    rsp.content_language = lang
+    langs = res.languages_provided(req, rsp)
+    if langs is not None:
+        lang = req.accept_language.best_match(langs)
+        if lang is None:
+            return False
+        rsp.content_language = lang
     return True
     
 def e05(res, req, rsp):
@@ -93,13 +95,11 @@ def e05(res, req, rsp):
 def e06(res, req, rsp):
     "Acceptable charset available?"
     charsets = res.charsets_provided(req, rsp)
-    if not charsets:
-        return True
-    charsets = [cs for (cs, func) in charsets]
-    charset = req.accept_charset.best_match(charsets)
-    if charset is None:
-        return False
-    rsp.charset = charset
+    if charsets is not None:
+        charset = req.accept_charset.best_match(charsets)
+        if charset is None:
+            return False
+        rsp.charset = charset
     return True
 
 def f06(res, req, rsp):
@@ -108,11 +108,13 @@ def f06(res, req, rsp):
 
 def f07(res, req, rsp):
     "Acceptable encoding available?"
-    encodings = [enc for (enc, func) in res.charsets_provided(req, rsp)]
-    enc = req.accept_encoding.best_match(encodings)
-    if enc is None:
-        return False
-    rsp.content_encoding = enc
+    encodings = res.encodings_provided(req, rsp)
+    if encodings is not None:
+        encodings = [enc for (enc, func) in encodings]
+        enc = req.accept_encoding.best_match(encodings)
+        if enc is None:
+            return False
+        rsp.content_encoding = enc
     return True
 
 def g07(res, req, rsp):
@@ -147,7 +149,9 @@ def g11(res, req, rsp):
 
 def h07(res, req, rsp):
     "If-Match: * exists?"
-    return '*' in req.if_match
+    # Need to recheck that if-match was an actual header
+    # because WebOb is says that '*' will match no header.
+    return 'if-match' in req.headers and '*' in req.if_match
 
 def h10(res, req, rsp):
     "If-Unmodified-Since exists?"
@@ -160,6 +164,7 @@ def h11(res, req, rsp):
 def h12(res, req, rsp):
     "Last-Modified > If-Unmodified-Since?"
     rsp.last_modified = res.last_modified(req, rsp)
+    print rsp.headers
     return rsp.last_modified > req.if_unmodified_since
 
 def i04(res, req, rsp):
@@ -200,11 +205,16 @@ def k07(res, req, rsp):
 
 def k13(res, req, rsp):
     "Etag in If-None-Match?"
-    return res.generate_etag(req, rsp) in req.if_none_match
+    rsp.etag = res.generate_etag(req, rsp)
+    return rsp.etag in req.if_none_match
 
 def l05(res, req, rsp):
     "Resource moved temporarily?"
-    return res.moved_temporarily(req, rsp)
+    uri = res.moved_temporarily(req, rsp)
+    if not uri:
+        return False
+    rsp.location = uri
+    return True
 
 def l07(res, req, rsp):
     "POST?"
@@ -220,7 +230,7 @@ def l14(res, req, rsp):
 
 def l15(res, req, rsp):
     "If-Modified-Since > Now?"
-    return req.if_modified_since > datetime.datetime.now()
+    return req.if_modified_since > datetime.datetime.now(webob.UTC)
 
 def l17(res, req, rsp):
     "Last-Modified > If-Modified-Since?"
@@ -251,8 +261,10 @@ def n11(res, req, rsp):
     "Redirect?"
     if res.post_is_create(req, rsp):
         handle_request_body(res, req, rsp)
-    elif not res.process_post(req, rsp):
-        raise errors.ServerError("Failed to process POST body.")
+    else:
+        if not res.process_post(req, rsp):
+            raise webob.exc.HTTPInternalServerError("Failed to process POST.")
+        return False
     rsp.location = res.created_location(req, rsp)
     if rsp.location:
         return True
@@ -274,28 +286,19 @@ def o18(res, req, rsp):
     "Multiple representations? (Build GET/HEAD body)"
     if req.method not in ["GET", "HEAD"]:
         return res.multiple_choices(req, rsp)
-    
-    rsp.etag = res.generate_etag(req, rsp)
-    rsp.last_modified = res.last_modified(req, rsp)
-    rsp.expires = res.expires(req, rsp)
-    
-    func = [
-        f for (ct, f)
-        in res.content_types_provided(req, rsp) if ct == rsp.content_type
-    ][0]
-    
-    rsp.app_iter = func(req, rsp)
 
+    handle_response_body(res, req, rsp)
     return res.multiple_choices(req, rsp)
 
 def o20(res, req, rsp):
     "Response includes entity?"
-    return req.app_iter is not None
+    return bool(rsp.body)
 
 def p03(res, req, rsp):
     "Conflict?"
     if res.is_conflict(req, rsp):
         return True
+
     handle_request_body(res, req, rsp)
     return False
 
@@ -303,19 +306,47 @@ def p11(res, req, rsp):
     "New resource?"
     return rsp.location is not None
 
+def first_match(func, req, rsp, expect):
+    for (key, value) in func(req, rsp):
+        if key == expect:
+            return value
+    return None
+
 def handle_request_body(res, req, rsp):
     ctype = req.content_type or "application/octet-stream"
     mtype = ctype.split(";", 1)[0]
-    
-    funcs = [
-        f for (mt, f)
-        in res.content_types_accepted(req, rsp) if mt == mtype
-    ]
-    if len(funcs) == 0:
-        raise webob.exc.HTTPUnsupportedMediaType()
-    
-    return funcs[0](req, rsp)
 
+    func = first_match(res.content_types_accepted, req, rsp, mtype)
+    if func is None:
+        raise webob.exc.HTTPUnsupportedMediaType()
+
+    return func(req, rsp)
+
+def handle_response_body(res, req, rsp):
+    rsp.etag = res.generate_etag(req, rsp)
+    rsp.last_modified = res.last_modified(req, rsp)
+    rsp.expires = res.expires(req, rsp)
+    
+    # Generate the body
+    func = first_match(res.content_types_provided, req, rsp, rsp.content_type)
+    if func is None:
+        raise webob.exc.HTTPInternalServerError()
+    
+    body = func(req, rsp)
+
+    # If we're using a charset, make sure to use unicode_body.    
+    if rsp.charset:
+        rsp.unicode_body = unicode(body)
+    else:
+        rsp.body = body
+
+    # Handle our content encoding.
+    encoding = rsp.content_encoding
+    if encoding:
+        func = first_match(res.encodings_provided, req, rsp, encoding)
+        if func is None:
+            raise webob.exc.HTTPInternalServerError()
+        rsp.body = func(rsp.body)
 
 TRANSITIONS = {
     b03: (200, c03), # Options?
@@ -333,7 +364,7 @@ TRANSITIONS = {
     c04: (d04, 406), # Acceptable media type available?
     d04: (d05, e05), # Accept-Language exists?
     d05: (e05, 406), # Accept-Language available?
-    e05: (f06, e06), # Accept-Charset exists?
+    e05: (e06, f06), # Accept-Charset exists?
     e06: (f06, 406), # Acceptable charset available?
     f06: (f07, g07), # Accept-Encoding exists?
     f07: (g07, 406), # Acceptable encoding available?
@@ -376,8 +407,16 @@ TRANSITIONS = {
 
 def process(klass, req, rsp):
     res = klass(req, rsp)
+
+    # Setup some defaults
+    rsp.charset = None
+    ctypes = [ct for (ct, func) in (res.content_types_provided(req, rsp) or [])]
+    if len(ctypes):
+        rsp.content_type = ctypes[0]
+
     state = b13
     while not isinstance(state, int):
+        print state
         if state(res, req, rsp):
             state = TRANSITIONS[state][0]
         else:
@@ -385,3 +424,4 @@ def process(klass, req, rsp):
         if not isinstance(state, (int, types.FunctionType)):
             raise webob.exc.HTTPServerError("Invalid state: %r" % state)
     rsp.status = state
+    return rsp

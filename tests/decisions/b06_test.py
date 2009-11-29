@@ -18,12 +18,12 @@ class b06(t.Test):
     
     def test_ok(self):
         self.req.headers['content-type'] = 'text/plain'
-        t.process(self.TestResource, self.req, self.rsp)
+        self.go()
         t.eq(self.rsp.status, '200 OK')
         t.eq(self.rsp.body, 'nom nom')
 
     def test_not_ok(self):
         self.req.headers['content-foo'] = 'bizbang'
-        t.process(self.TestResource, self.req, self.rsp)
+        self.go()
         t.eq(self.rsp.status, '501 Not Implemented')
         t.eq(self.rsp.body, '')

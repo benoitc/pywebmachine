@@ -14,14 +14,27 @@ class b03(t.Test):
             return "Hello, world!"
     
     def test_get(self):
-        t.process(self.TestResource, self.req, self.rsp)
+        self.go()
         t.eq(self.rsp.status, '200 OK')
         t.eq(self.rsp.headers.get('X-Noah'), None)
         t.eq(self.rsp.body, 'Hello, world!')
 
     def test_options(self):
         self.req.method = 'OPTIONS'
-        t.process(self.TestResource, self.req, self.rsp)
+        self.go()
         t.eq(self.rsp.status, '200 OK')
         t.eq(self.rsp.headers['X-Noah'], 'Awesome')
         t.eq(self.rsp.body, '')
+    
+    # Fairly unrelated, but no good place to put this
+    def test_non_unicode_body(self):
+        prev = self.TestResource.to_html
+        def my_html(self, req, rsp):
+            rsp.charset = None
+            return "Hi"
+        self.TestResource.to_html = my_html
+        self.go()
+        self.TestResource.to_html = prev
+        t.eq(self.rsp.status, '200 OK')
+        t.eq(self.rsp.body, 'Hi')
+        
