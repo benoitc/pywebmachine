@@ -25,3 +25,4 @@ pywebmachine.egg-info
 dist/
 doc/_build/
 distribute-*
+.coverage
