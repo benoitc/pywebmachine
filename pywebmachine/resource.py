@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+#
+# This file is part of pywebmachine released under the MIT license. 
+# See the NOTICE for more information.
 
 class Resource(object):
 
