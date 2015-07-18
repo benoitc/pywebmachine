@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -
 #
-# This file is part of gunicorn released under the MIT license. 
+# This file is part of gunicorn released under the MIT license.
 # See the NOTICE for more information.
 
 
@@ -20,7 +20,7 @@ setup(
             'README.rst'
         )
     ).read(),
-    
+
     author = 'Paul J. Davis',
     author_email = 'paul.joseph.davis@gmail.com',
     license = 'MIT',
@@ -41,10 +41,11 @@ setup(
     zip_safe = True,
     packages = find_packages(exclude=['examples', 'tests']),
     include_package_data = True,
-    
+
     install_requires = [
-        'webob'
+        'webob',
+        'routes'
     ],
-    
+
     test_suite = 'nose.collector',
 )

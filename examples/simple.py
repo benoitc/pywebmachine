@@ -3,33 +3,14 @@
 import optparse as op
 from wsgiref.simple_server import make_server
 
-import pywebmachine as pwm
-import routes
-import webob
-import webob.exc
+from pywebmachine import WSGIMachine, Resource
 
-class MyResource(pwm.Resource):
+
+class MyResource(Resource):
     def to_html(self, req, rsp):
         return "<html><body>Stuff!</body></html>"
 
-map = routes.Mapper()
-map.connect("/", resource=MyResource)
-
-def application(environ, start_response):
-    req = webob.Request(environ)
-    rsp = webob.Response()
-
-    match = map.routematch(req.path)
-    if match is None:
-        rsp = webob.exc.HTTPNotFound()
-    else:
-        res = match[0]["resource"]
-        try:
-            pwm.process(res, req, rsp)
-        except webob.exc.HTTPException, error:
-            rsp = error
-
-    return rsp(environ, start_response)
+application = WSGIMachine([("/", MyResource)])
 
 def options():
     return [
